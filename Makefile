@@ -10,25 +10,29 @@ TARGET = $(PROJECT).elf
 CC = avr-gcc
 AVRDUDE = avrdude -c usbasp -p$(MCU)
 
-#FUSEH = 0xc1
-#FUSEL = 0x9f
-# Fuse high byte:
-# 0xc1 = 1 1 0 0   0 0 0 1 <-- BOOTRST (boot reset vector at 0x3800)
-#        ^ ^ ^ ^   ^ ^ ^------ BOOTSZ0
-#        | | | |   | +-------- BOOTSZ1
-#        | | | |   + --------- EESAVE (preserve EEPROM over chip erase)
-#        | | | +-------------- CKOPT (full output swing)
-#        | | +---------------- SPIEN (allow serial programming)
-#        | +------------------ WDTON (WDT not always on)
-#        +-------------------- RSTDISBL (reset pin is enabled)
+LFUSE = 0xff
+HFUSE = 0xdd
+EFUSE = 0x01 # (default)
 # Fuse low byte:
-# 0x9f = 1 0 0 1   1 1 1 1
+# 0xff = 1 1 1 1   1 1 1 1
 #        ^ ^ \ /   \--+--/
 #        | |  |       +------- CKSEL 3..0 (external >8M crystal)
-#        | |  +--------------- SUT 1..0 (crystal osc, BOD enabled)
-#        | +------------------ BODEN (BrownOut Detector enabled)
-#        +-------------------- BODLEVEL (2.7V)
-
+#        | |  +--------------- SUT 1..0 (16K CK/14K CK + 65 ms)
+#        | +------------------ CKOUT
+#        +-------------------- CKDIV8
+# Fuse high byte:
+# 0xdd = 1 1 0 1   1 1 0 1
+#        ^ ^ ^ ^   ^ \-+-/
+#        | | | |   |   +------ BODLEVEL 2..0 (2.7 V)
+#        | | | |   + --------- EESAVE (don't preserve EEPROM over chip erase)
+#        | | | +-------------- WDTON (WDT not always on)
+#        | | +---------------- SPIEN (allow serial programming)
+#        | +------------------ DWEN (debugWIRE disabled)
+#        +-------------------- RSTDISBL (reset pin is enabled)
+# Fuse extended byte:
+# 0x01 = 0 0 0 0   0 0 0 1 <-- BOOTRST (boot reset vector at 0x3800)
+#                    \ /  
+#                     +------- BOOTSZ 1..0 (size=1024 words)
 
 ## Options common to compile, link and assembly rules
 COMMON = -g -mmcu=$(MCU)
