@@ -1,5 +1,5 @@
 ###############################################################################
-# Makefile for the project midicom
+# Makefile for the project midicom (based on the V-USB-MIDI Makefile)
 ###############################################################################
 
 ## General Flags
@@ -35,7 +35,7 @@ COMMON = -g -mmcu=$(MCU)
 
 ## Compile options common for all C compilation units.
 CFLAGS = $(COMMON)
-CFLAGS += -Wall -DF_CPU=12000000UL -Os -fsigned-char  $(DEBUG)
+CFLAGS += -Wall -DF_CPU=12000000UL -Os -fsigned-char $(DEBUG)
 
 ## Assembly specific flags
 ASMFLAGS = $(COMMON)
@@ -51,7 +51,7 @@ HEX_FLASH_FLAGS = -R .eeprom
 
 
 ## Include Directories
-INCLUDES = -I"." -I"../usbdrv" -I"../." 
+INCLUDES = -I. -Iusbdrv
 
 ## Objects that must be built in order to link
 OBJECTS = usbdrv.o usbdrvasm.o oddebug.o main.o
@@ -65,13 +65,13 @@ all: $(TARGET) $(PROJECT).hex $(PROJECT).lss size
 $(OBJECTS): usbconfig.h Makefile
 
 ## Compile
-usbdrv.o: ../usbdrv/usbdrv.c
+usbdrv.o: usbdrv/usbdrv.c
 	$(CC) $(INCLUDES) $(CFLAGS) -c  $<
 
-usbdrvasm.o: ../usbdrv/usbdrvasm.S
+usbdrvasm.o: usbdrv/usbdrvasm.S
 	$(CC) $(INCLUDES) $(ASMFLAGS) -c  $<
 
-oddebug.o: ../usbdrv/oddebug.c
+oddebug.o: usbdrv/oddebug.c
 	$(CC) $(INCLUDES) $(CFLAGS) -c  $<
 
 main.o: main.c

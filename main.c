@@ -1,12 +1,15 @@
 
 /* Name: main.c
- * Project: V-USB MIDI device on Low-Speed USB
- * Author: Martin Homuth-Rosemann
+ * Project: midicom (based on V-USB MIDI device on Low-Speed USB)
+ * Author: Anton Eliasson
  * Creation Date: 2008-03-11
- * Copyright: (c) 2008 by Martin Homuth-Rosemann.
- * License: GPL.
+ * Copyright: (c) 2008 by Martin Homuth-Rosemann, 2011 by Anton Eliasson.
+ * License: GNU General Public License version 2.
  *
  */
+
+//---------------------------------------------------------------------------
+// Includes
 
 #include <string.h>
 #include <avr/io.h>
@@ -17,11 +20,29 @@
 #include "usbdrv.h"
 #include "oddebug.h"
 
+//---------------------------------------------------------------------------
+// Pin definitions
 
-#if DEBUG_LEVEL > 0
-#	warning "Never compile production devices with debugging enabled"
-#endif
+#define BTN_PORT PORTB
+#define BTN0_PIN PB0
+#define LED_PORT PORTC
+#define LED0_PIN PC0
+#define LED1_PIN PC1
+#define LED2_PIN PC2
+#define LED3_PIN PC3
+#define LED4_PIN PC4
+#define LED5_PIN PC5 // unused
 
+//---------------------------------------------------------------------------
+// Macros
+
+#define sbi(port, bit) (port) |= (1 << (bit))
+#define cbi(port, bit) (port) &= ~(1 << (bit))
+
+//---------------------------------------------------------------------------
+// Variable declarations
+
+//---------------------------------------------------------------------------
 
 // This descriptor is based on http://www.usb.org/developers/devclass_docs/midi10.pdf
 // 
@@ -223,7 +244,7 @@ uchar usbFunctionSetup(uchar data[8])
 	usbRequest_t *rq = (void *) data;
 
 	// DEBUG LED
-	PORTC ^= 0x01;
+	LED_PORT ^= (1<<LED0_PIN);
 
 	if ((rq->bmRequestType & USBRQ_TYPE_MASK) == USBRQ_TYPE_CLASS) {	/* class request type */
 
@@ -244,7 +265,7 @@ uchar usbFunctionSetup(uchar data[8])
 uchar usbFunctionRead(uchar * data, uchar len)
 {
 	// DEBUG LED
-	PORTC ^= 0x02;
+	LED_PORT ^= (1<<LED1_PIN);
 
 	data[0] = 0;
 	data[1] = 0;
@@ -265,7 +286,7 @@ uchar usbFunctionRead(uchar * data, uchar len)
 uchar usbFunctionWrite(uchar * data, uchar len)
 {
 	// DEBUG LED
-	PORTC ^= 0x04;
+	LED_PORT ^= (1<<LED2_PIN);
 	return 1;
 }
 
@@ -280,7 +301,7 @@ uchar usbFunctionWrite(uchar * data, uchar len)
 void usbFunctionWriteOut(uchar * data, uchar len)
 {
 	// DEBUG LED
-	PORTC ^= 0x20;
+	LED_PORT ^= (1<<LED3_PIN);
 }
 
 
@@ -316,46 +337,15 @@ static void hardwareInit(void)
 	USBDDR = 0;		/*  remove USB reset condition */
 #endif
 
-// PORTA is used for up to eight potentiometer inputs.
-// ADC Setup
-	// prescaler 0  000 :   / 2
-	// prescaler 1  001 :   / 2
-	// prescaler 2  010 :   / 4
-	// prescaler 3  011 :   / 8
-	// prescaler 4  100 :   / 16
-	// prescaler 5  101 :   / 32
-	// prescaler 6  110 :   / 64
-	// prescaler 7  111 :   / 128
-	// adcclock : 50..200 kHz
-	// enable, prescaler = 2^6 (-> 12Mhz / 64 = 187.5 kHz)
-	ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1) | (0 << ADPS0);
-
-	//PORTA = 0xff;   /* activate all pull-ups */
-	//DDRA = 0;       /* all pins input */
-
 // keys/switches setup
-// PORTB has eight keys (active low).
+// PORTB has up to six keys (active low).
 	PORTB = 0xff;		/* activate all pull-ups */
 	DDRB = 0;		/* all pins input */
-// PORTC has eight (debug) LEDs (active low).
-	PORTC = 0xff;		/* all LEDs off */
-	DDRC = 0xff;		/* all pins output */
+// PORTC has up to six debug LEDs (active low).
+	PORTC = 0xff;		/* all LEDs off, pullups on the rest of the pins */
+	DDRC = 0x3f;		/* pins PC0-PC5 output */
 }
 
-
-int adc(uchar channel)
-{
-	// single ended channel 0..7
-	ADMUX = channel & 0x07;
-	// AREF ext., adc right adjust result
-	ADMUX |= (0 << REFS1) | (0 << REFS0) | (0 << ADLAR);
-	// adc start conversion
-	ADCSRA |= (1 << ADSC);
-	while (ADCSRA & (1 << ADSC)) {
-		;		// idle
-	}
-	return ADC;
-}
 
 
 /* Simple monophonic keyboard
@@ -376,10 +366,8 @@ static uchar keyPressed(void)
 
 	x = PINB;
 	mask = 1;
-	for (i = 0; i <= 13; i += 2) {
+	for (i = 0; i <= 10; i += 2) {
 		if (6 == i)
-			i--;
-		if (13 == i)
 			i--;
 		if ((x & mask) == 0)
 			return i + 60;
@@ -392,12 +380,9 @@ static uchar keyPressed(void)
 
 int main(void)
 {
-	int adcOld[8] = { -1, -1, -1, -1, -1, -1, -1, -1 };
 	uchar key, lastKey = 0;
 	uchar keyDidChange = 0;
 	uchar midiMsg[8];
-	uchar channel = 0;
-	int value;
 	uchar iii;
 
 	wdt_enable(WDTO_1S);
@@ -409,8 +394,6 @@ int main(void)
 
 	sei();
 	
-	// only ADC channel 6 and channel 7 are used
-	channel = 6;
 	for (;;) {		/* main event loop */
 		wdt_reset();
 		usbPoll();
@@ -422,7 +405,7 @@ int main(void)
 		if (usbInterruptIsReady()) {
 			if (keyDidChange) {
 				// DEBUG LED
-				PORTC ^= 0x40;
+				LED_PORT ^= (1<<LED4_PIN);
 				/* use last key and not current key status in order to avoid lost
 				   changes in key status. */
 				// up to two midi events in one midi msg.
@@ -449,26 +432,6 @@ int main(void)
 				usbSetInterrupt(midiMsg, iii);
 				keyDidChange = 0;
 				lastKey = key;
-			} else {	// if no key event check analog input
-				value = adc(channel);	// 0..1023
-				// hysteresis
-				if (adcOld[channel] - value > 7
-				    || adcOld[channel] - value < -7) {
-					// DEBUG LED
-					PORTC ^= 0x80;
-					adcOld[channel] = value;
-					// MIDI CC msg
-					midiMsg[0] = 0x0b;
-					midiMsg[1] = 0xb0;
-					midiMsg[2] = channel + 70;	// cc 70..77 
-					midiMsg[3] = value >> 3;
-					sendEmptyFrame = 0;
-					usbSetInterrupt(midiMsg, 4);
-				}
-				channel++;
-				channel &= 0x07;
-				if (0 == channel)
-					channel = 6;
 			}
 		}		// usbInterruptIsReady()
 	}
