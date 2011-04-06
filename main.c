@@ -42,7 +42,41 @@
 //---------------------------------------------------------------------------
 // Variable declarations
 
+#define FOSC 12000000 // Clock Speed
+#define BAUD 31250 // MIDI @ 31,25 kbaud
+#define MYUBRR FOSC/16/BAUD-1
+
 //---------------------------------------------------------------------------
+
+// USART functions
+void USART_Init( unsigned int ubrr)
+{
+    /*Set baud rate */
+    UBRR0H = (unsigned char)(ubrr>>8);
+    UBRR0L = (unsigned char)ubrr;
+    /* Enable receiver and transmitter */
+    UCSR0B = (1<<RXEN0)|(1<<TXEN0);
+    /* Set frame format: 8data, 2stop bit */
+    UCSR0C = (1<<USBS0)|(3<<UCSZ00);
+}
+
+void USART_Transmit( unsigned char data )
+{
+    /* Wait for empty transmit buffer */
+    while ( !( UCSR0A & (1<<UDRE0)) )
+    ;
+    /* Put data into buffer, sends the data */
+    UDR0 = data;
+}
+
+unsigned char USART_Receive( void )
+{
+    /* Wait for data to be received */
+    while ( !(UCSR0A & (1<<RXC0)) )
+    ;
+    /* Get and return received data from buffer */
+    return UDR0;
+}
 
 // This descriptor is based on http://www.usb.org/developers/devclass_docs/midi10.pdf
 // 
@@ -244,7 +278,7 @@ uchar usbFunctionSetup(uchar data[8])
 	usbRequest_t *rq = (void *) data;
 
 	// DEBUG LED
-	LED_PORT ^= (1<<LED0_PIN);
+	LED_PORT ^= (1<<LED0_PIN); // never used?
 
 	if ((rq->bmRequestType & USBRQ_TYPE_MASK) == USBRQ_TYPE_CLASS) {	/* class request type */
 
@@ -265,7 +299,7 @@ uchar usbFunctionSetup(uchar data[8])
 uchar usbFunctionRead(uchar * data, uchar len)
 {
 	// DEBUG LED
-	LED_PORT ^= (1<<LED1_PIN);
+	LED_PORT ^= (1<<LED1_PIN); // never used?
 
 	data[0] = 0;
 	data[1] = 0;
@@ -286,7 +320,7 @@ uchar usbFunctionRead(uchar * data, uchar len)
 uchar usbFunctionWrite(uchar * data, uchar len)
 {
 	// DEBUG LED
-	LED_PORT ^= (1<<LED2_PIN);
+	LED_PORT ^= (1<<LED2_PIN); // never used?
 	return 1;
 }
 
@@ -336,6 +370,8 @@ static void hardwareInit(void)
 #else
 	USBDDR = 0;		/*  remove USB reset condition */
 #endif
+
+    USART_Init(MYUBRR); // init midi connection
 
 // keys/switches setup
 // PORTB has up to six keys (active low).
@@ -404,8 +440,7 @@ int main(void)
 
 		if (usbInterruptIsReady()) {
 			if (keyDidChange) {
-				// DEBUG LED
-				LED_PORT ^= (1<<LED4_PIN);
+				LED_PORT ^= (1<<LED4_PIN); // blinkar när en knapp trycks in?
 				/* use last key and not current key status in order to avoid lost
 				   changes in key status. */
 				// up to two midi events in one midi msg.
